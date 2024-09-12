@@ -1,49 +1,30 @@
 options(digits = 13)
 
-# Dati sadaļai 
-# 1. Paņem datus
-setwd(paste0(path, "//intermediate_tables"))
-load(paste0("1_LC_TOTAL_DIS010c_", substr(year, 3, 4), "Q", Q, ".RData"))      
-t <- get(paste0("LC_TOTAL_DIS010c_", substr(year, 3, 4), "Q", Q))
-#fileName <- paste0("t330_", Q)
-#assign(fileName, t)
-rm(list = paste0("LC_TOTAL_DIS010c_", substr(year, 3, 4), "Q", Q))
+# Dati ir t330(c10DI)
+wb <- loadWorkbook(paste0("../c10DI/", year, "Q", Q, "/SMUD/LCI_", substr(year, 3,4), "C", Q, ".xlsx"), 
+                   create = FALSE, password = NULL)
+ws <- readWorksheet(wb, sheet = 1)
+detach("package:XLConnect", unload = TRUE)
+rm(wb)
 
-#2. Paņem ceturkšņa QR šablonu T330
-setwd(paste0(path, year, "//templates"))
-load(paste0(year, "Q", Q, "_T330.RData")) 
+ws <- ws[ ,c("VSN", "DAT", "nT", "NOZ2", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8")]
+if (any(ws$DAT[1] == c(paste0("0", Q * 3, substr(year, 3, 4)), paste0(Q * 3, substr(year, 3, 4))))) {
+  T330 <- ws[ws$nT == "330", c("NOZ2", paste0("G", Q))]
+  T330$NOZ2[T330$NOZ2 == "TOTAL"] <- "Kopā (LV)"
+  rownames(T330) <- NULL
+} else {
+  stop("4_gatavs_T330: SMUD datnē neatbilst datums.")
+}
 
-#3. šablonu sadali pa ceturkšņiem
-T330$Periods <- factor(T330$Periods)
-t_split <- split(T330, T330$Periods)
-names(t_split) <- paste0("T330_", substr(names(t_split), 1, 7))
-t_split_tabs <- names(t_split)
-list2env(t_split, envir = .GlobalEnv)
-rm(t_split, T330)
+#5 Ievieto datus
+mergedDF <- merge(t330, T330, by.x = "N", by.y = "NOZ2", all.x = TRUE)
+mergedDF$Value <- mergedDF[ , paste0("G", Q)]
 
-# paņem vajadzīgo
-T330 <- get(paste0("T330_", year, "C0", Q))
-rm(list = t_split_tabs)
-rm(t_split_tabs)
+Norder <- readRDS("../QR/ceturkšņa/r_code/templates/Norder_forQRt330.rds")
+mergedDF <- mergedDF[match(Norder, mergedDF$N) , ailes_order]
+rownames(mergedDF) <- NULL
 
-#4. Datu šablonā pārvārdo "A-S" uz "Kopā (LV)" un izņem "B-S"
-t$NACE[t$NACE == "A-S"] <- "Kopā"
-t <- t[t$NACE != "B-S", ]
-sum(t$NACE %in% T330$NACE) == nrow(t)
-
-#5. Ievieto datus
-mergedDF <- merge(T330, t[ , c("NACE", "EUR")], by.x = "NACE", by.y = "NACE")
-mergedDF$Value <- mergedDF$EUR
-
-#6. Sakārto ailes un rindas
-setwd(paste0(path, year, "//templates"))
-ailes <- readRDS("ailes_order.RDS")
-mergedDF<- mergedDF[order(mergedDF$NACE), ailes]
-rm(t, T330, ailes)
-
-#7. Pārsauc un saglabā
+#7 Pārsauc
 gatavs_T330 <- mergedDF
 
-setwd(paste0(path, year, "//intermediate_tables"))
-save(gatavs_T330, file = "gatavs_T330.RData")
-rm(mergedDF, gatavs_T330)
+rm(t330, T330, Norder, mergedDF, ailes_order, ws)
